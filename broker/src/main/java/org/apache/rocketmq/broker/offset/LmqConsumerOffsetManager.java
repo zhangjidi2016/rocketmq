@@ -28,6 +28,10 @@ import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 public class LmqConsumerOffsetManager extends ConsumerOffsetManager {
     private ConcurrentHashMap<String, Long> lmqOffsetTable = new ConcurrentHashMap<>(512);
 
+    public LmqConsumerOffsetManager() {
+
+    }
+
     public LmqConsumerOffsetManager(BrokerController brokerController) {
         super(brokerController);
     }
@@ -88,7 +92,7 @@ public class LmqConsumerOffsetManager extends ConsumerOffsetManager {
         if (jsonString != null) {
             LmqConsumerOffsetManager obj = RemotingSerializable.fromJson(jsonString, LmqConsumerOffsetManager.class);
             if (obj != null) {
-                super.offsetTable = obj.offsetTable;
+                super.setOffsetTable(obj.getOffsetTable());
                 this.lmqOffsetTable = obj.lmqOffsetTable;
             }
         }

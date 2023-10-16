@@ -16,6 +16,10 @@
  */
 package org.apache.rocketmq.remoting.netty;
 
+import org.apache.rocketmq.remoting.common.TlsMode;
+
+import static org.apache.rocketmq.remoting.netty.TlsSystemConfig.TLS_ENABLE;
+
 public class NettyClientConfig {
     /**
      * Worker thread number
@@ -38,10 +42,16 @@ public class NettyClientConfig {
     private boolean clientPooledByteBufAllocatorEnable = false;
     private boolean clientCloseSocketIfTimeout = NettySystemConfig.clientCloseSocketIfTimeout;
 
-    private boolean useTLS;
+    private boolean useTLS = Boolean.parseBoolean(System.getProperty(TLS_ENABLE,
+        String.valueOf(TlsSystemConfig.tlsMode == TlsMode.ENFORCING)));
+
+    private String socksProxyConfig = "{}";
 
     private int writeBufferHighWaterMark = NettySystemConfig.writeBufferHighWaterMark;
     private int writeBufferLowWaterMark = NettySystemConfig.writeBufferLowWaterMark;
+
+    private boolean disableCallbackExecutor = false;
+    private boolean disableNettyWorkerGroup = false;
 
     public boolean isClientCloseSocketIfTimeout() {
         return clientCloseSocketIfTimeout;
@@ -153,5 +163,29 @@ public class NettyClientConfig {
 
     public void setWriteBufferHighWaterMark(int writeBufferHighWaterMark) {
         this.writeBufferHighWaterMark = writeBufferHighWaterMark;
+    }
+
+    public boolean isDisableCallbackExecutor() {
+        return disableCallbackExecutor;
+    }
+
+    public void setDisableCallbackExecutor(boolean disableCallbackExecutor) {
+        this.disableCallbackExecutor = disableCallbackExecutor;
+    }
+
+    public boolean isDisableNettyWorkerGroup() {
+        return disableNettyWorkerGroup;
+    }
+
+    public void setDisableNettyWorkerGroup(boolean disableNettyWorkerGroup) {
+        this.disableNettyWorkerGroup = disableNettyWorkerGroup;
+    }
+
+    public String getSocksProxyConfig() {
+        return socksProxyConfig;
+    }
+
+    public void setSocksProxyConfig(String socksProxyConfig) {
+        this.socksProxyConfig = socksProxyConfig;
     }
 }

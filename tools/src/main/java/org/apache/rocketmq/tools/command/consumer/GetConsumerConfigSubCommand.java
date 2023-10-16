@@ -26,10 +26,10 @@ import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.rocketmq.common.protocol.body.ClusterInfo;
-import org.apache.rocketmq.common.protocol.route.BrokerData;
-import org.apache.rocketmq.common.subscription.SubscriptionGroupConfig;
 import org.apache.rocketmq.remoting.RPCHook;
+import org.apache.rocketmq.remoting.protocol.body.ClusterInfo;
+import org.apache.rocketmq.remoting.protocol.route.BrokerData;
+import org.apache.rocketmq.remoting.protocol.subscription.SubscriptionGroupConfig;
 import org.apache.rocketmq.tools.admin.DefaultMQAdminExt;
 import org.apache.rocketmq.tools.command.SubCommand;
 import org.apache.rocketmq.tools.command.SubCommandException;
@@ -43,7 +43,7 @@ public class GetConsumerConfigSubCommand implements SubCommand {
 
     @Override
     public String commandDesc() {
-        return "Get consumer config by subscription group name!";
+        return "Get consumer config by subscription group name";
     }
 
     @Override
@@ -60,6 +60,11 @@ public class GetConsumerConfigSubCommand implements SubCommand {
         DefaultMQAdminExt adminExt = new DefaultMQAdminExt(rpcHook);
         adminExt.setInstanceName(Long.toString(System.currentTimeMillis()));
         String groupName = commandLine.getOptionValue('g').trim();
+
+        if (commandLine.hasOption('n')) {
+            adminExt.setNamesrvAddr(commandLine.getOptionValue('n').trim());
+        }
+
         try {
             adminExt.start();
             List<ConsumerConfigInfo> consumerConfigInfoList = new ArrayList<>();
@@ -134,7 +139,7 @@ class ConsumerConfigInfo {
         return brokerName;
     }
 
-    public void setBrokerName(String brokerNameList) {
+    public void setBrokerName(String brokerName) {
         this.brokerName = brokerName;
     }
 

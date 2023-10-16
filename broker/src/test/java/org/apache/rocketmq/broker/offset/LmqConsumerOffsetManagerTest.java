@@ -19,16 +19,15 @@ package org.apache.rocketmq.broker.offset;
 
 import java.io.File;
 import java.util.Map;
-
 import org.apache.rocketmq.broker.BrokerController;
 import org.apache.rocketmq.broker.subscription.LmqSubscriptionGroupManager;
 import org.apache.rocketmq.broker.topic.LmqTopicConfigManager;
 import org.apache.rocketmq.common.BrokerConfig;
 import org.apache.rocketmq.common.TopicConfig;
 import org.apache.rocketmq.common.UtilAll;
-import org.apache.rocketmq.common.subscription.SubscriptionGroupConfig;
 import org.apache.rocketmq.remoting.netty.NettyClientConfig;
 import org.apache.rocketmq.remoting.netty.NettyServerConfig;
+import org.apache.rocketmq.remoting.protocol.subscription.SubscriptionGroupConfig;
 import org.apache.rocketmq.store.config.MessageStoreConfig;
 import org.junit.After;
 import org.junit.Test;
@@ -71,6 +70,33 @@ public class LmqConsumerOffsetManagerTest {
 
         long offset1 = lmqConsumerOffsetManager.queryOffset(lmqGroupName, lmqTopicName + "test", 0);
         assertThat(offset1).isEqualTo(-1L);
+    }
+
+    @Test
+    public void testOffsetManage1() {
+        LmqConsumerOffsetManager lmqConsumerOffsetManager = new LmqConsumerOffsetManager(brokerController);
+
+        String lmqTopicName = "%LMQ%1111";
+
+        String lmqGroupName = "%LMQ%GID_test";
+
+        lmqConsumerOffsetManager.commitOffset("127.0.0.1", lmqGroupName, lmqTopicName, 0, 10L);
+
+        lmqTopicName = "%LMQ%1222";
+
+        lmqGroupName = "%LMQ%GID_test222";
+
+        lmqConsumerOffsetManager.commitOffset("127.0.0.1", lmqGroupName, lmqTopicName, 0, 10L);
+        lmqConsumerOffsetManager.commitOffset("127.0.0.1","GID_test1", "MqttTest",0, 10L);
+
+        String json = lmqConsumerOffsetManager.encode(true);
+
+        LmqConsumerOffsetManager lmqConsumerOffsetManager1 = new LmqConsumerOffsetManager(brokerController);
+
+        lmqConsumerOffsetManager1.decode(json);
+
+        assertThat(lmqConsumerOffsetManager1.getOffsetTable().size()).isEqualTo(1);
+        assertThat(lmqConsumerOffsetManager1.getLmqOffsetTable().size()).isEqualTo(2);
     }
 
     @After

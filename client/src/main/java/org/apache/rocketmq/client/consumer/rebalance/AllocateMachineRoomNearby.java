@@ -23,9 +23,7 @@ import java.util.Map.Entry;
 import java.util.TreeMap;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.client.consumer.AllocateMessageQueueStrategy;
-import org.apache.rocketmq.client.log.ClientLogger;
 import org.apache.rocketmq.common.message.MessageQueue;
-import org.apache.rocketmq.logging.InternalLogger;
 
 /**
  * An allocate strategy proxy for based on machine room nearside priority. An actual allocate strategy can be
@@ -35,8 +33,7 @@ import org.apache.rocketmq.logging.InternalLogger;
  * should only be allocated to those. Otherwise, those message queues can be shared along all consumers since there are
  * no alive consumer to monopolize them.
  */
-public class AllocateMachineRoomNearby implements AllocateMessageQueueStrategy {
-    private final InternalLogger log = ClientLogger.getLog();
+public class AllocateMachineRoomNearby extends AbstractAllocateMessageQueueStrategy {
 
     private final AllocateMessageQueueStrategy allocateMessageQueueStrategy;//actual allocate strategy
     private final MachineRoomResolver machineRoomResolver;
@@ -58,32 +55,19 @@ public class AllocateMachineRoomNearby implements AllocateMessageQueueStrategy {
     @Override
     public List<MessageQueue> allocate(String consumerGroup, String currentCID, List<MessageQueue> mqAll,
         List<String> cidAll) {
-        if (currentCID == null || currentCID.length() < 1) {
-            throw new IllegalArgumentException("currentCID is empty");
-        }
-        if (mqAll == null || mqAll.isEmpty()) {
-            throw new IllegalArgumentException("mqAll is null or mqAll empty");
-        }
-        if (cidAll == null || cidAll.isEmpty()) {
-            throw new IllegalArgumentException("cidAll is null or cidAll empty");
-        }
 
-        List<MessageQueue> result = new ArrayList<MessageQueue>();
-        if (!cidAll.contains(currentCID)) {
-            log.info("[BUG] ConsumerGroup: {} The consumerId: {} not in cidAll: {}",
-                consumerGroup,
-                currentCID,
-                cidAll);
+        List<MessageQueue> result = new ArrayList<>();
+        if (!check(consumerGroup, currentCID, mqAll, cidAll)) {
             return result;
         }
 
         //group mq by machine room
-        Map<String/*machine room */, List<MessageQueue>> mr2Mq = new TreeMap<String, List<MessageQueue>>();
+        Map<String/*machine room */, List<MessageQueue>> mr2Mq = new TreeMap<>();
         for (MessageQueue mq : mqAll) {
             String brokerMachineRoom = machineRoomResolver.brokerDeployIn(mq);
             if (StringUtils.isNoneEmpty(brokerMachineRoom)) {
                 if (mr2Mq.get(brokerMachineRoom) == null) {
-                    mr2Mq.put(brokerMachineRoom, new ArrayList<MessageQueue>());
+                    mr2Mq.put(brokerMachineRoom, new ArrayList<>());
                 }
                 mr2Mq.get(brokerMachineRoom).add(mq);
             } else {
@@ -92,12 +76,12 @@ public class AllocateMachineRoomNearby implements AllocateMessageQueueStrategy {
         }
 
         //group consumer by machine room
-        Map<String/*machine room */, List<String/*clientId*/>> mr2c = new TreeMap<String, List<String>>();
+        Map<String/*machine room */, List<String/*clientId*/>> mr2c = new TreeMap<>();
         for (String cid : cidAll) {
             String consumerMachineRoom = machineRoomResolver.consumerDeployIn(cid);
             if (StringUtils.isNoneEmpty(consumerMachineRoom)) {
                 if (mr2c.get(consumerMachineRoom) == null) {
-                    mr2c.put(consumerMachineRoom, new ArrayList<String>());
+                    mr2c.put(consumerMachineRoom, new ArrayList<>());
                 }
                 mr2c.get(consumerMachineRoom).add(cid);
             } else {
@@ -105,7 +89,7 @@ public class AllocateMachineRoomNearby implements AllocateMessageQueueStrategy {
             }
         }
 
-        List<MessageQueue> allocateResults = new ArrayList<MessageQueue>();
+        List<MessageQueue> allocateResults = new ArrayList<>();
 
         //1.allocate the mq that deploy in the same machine room with the current consumer
         String currentMachineRoom = machineRoomResolver.consumerDeployIn(currentCID);

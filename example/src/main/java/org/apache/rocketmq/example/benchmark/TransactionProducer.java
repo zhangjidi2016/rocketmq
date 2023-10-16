@@ -18,9 +18,9 @@
 package org.apache.rocketmq.example.benchmark;
 
 import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
-import org.apache.commons.cli.PosixParser;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.producer.LocalTransactionState;
@@ -28,10 +28,13 @@ import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.client.producer.SendStatus;
 import org.apache.rocketmq.client.producer.TransactionListener;
 import org.apache.rocketmq.client.producer.TransactionMQProducer;
+import org.apache.rocketmq.common.UtilAll;
 import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.common.message.MessageConst;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.remoting.RPCHook;
+import org.apache.rocketmq.remoting.protocol.RemotingCommand;
+import org.apache.rocketmq.remoting.protocol.SerializeType;
 import org.apache.rocketmq.srvutil.ServerUtil;
 
 import java.io.UnsupportedEncodingException;
@@ -61,8 +64,9 @@ public class TransactionProducer {
     static final int MAX_CHECK_RESULT_IN_MSG = 20;
 
     public static void main(String[] args) throws MQClientException, UnsupportedEncodingException {
+        System.setProperty(RemotingCommand.SERIALIZE_TYPE_PROPERTY, SerializeType.ROCKETMQ.name());
         Options options = ServerUtil.buildCommandlineOptions(new Options());
-        CommandLine commandLine = ServerUtil.parseCmdLine("TransactionProducer", args, buildCommandlineOptions(options), new PosixParser());
+        CommandLine commandLine = ServerUtil.parseCmdLine("TransactionProducer", args, buildCommandlineOptions(options), new DefaultParser());
         TxSendConfig config = new TxSendConfig();
         config.topic = commandLine.hasOption('t') ? commandLine.getOptionValue('t').trim() : "BenchmarkTest";
         config.threadCount = commandLine.hasOption('w') ? Integer.parseInt(commandLine.getOptionValue('w')) : 32;
@@ -75,13 +79,14 @@ public class TransactionProducer {
         config.sendInterval = commandLine.hasOption("i") ? Integer.parseInt(commandLine.getOptionValue("i")) : 0;
         config.aclEnable = commandLine.hasOption('a') && Boolean.parseBoolean(commandLine.getOptionValue('a'));
         config.msgTraceEnable = commandLine.hasOption('m') && Boolean.parseBoolean(commandLine.getOptionValue('m'));
+        config.reportInterval = commandLine.hasOption("ri") ? Integer.parseInt(commandLine.getOptionValue("ri")) : 10000;
 
         final ExecutorService sendThreadPool = Executors.newFixedThreadPool(config.threadCount);
 
         final StatsBenchmarkTProducer statsBenchmark = new StatsBenchmarkTProducer();
 
         ScheduledExecutorService executorService = new ScheduledThreadPoolExecutor(1,
-                new BasicThreadFactory.Builder().namingPattern("BenchmarkTimerThread-%d").daemon(true).build());
+            new BasicThreadFactory.Builder().namingPattern("BenchmarkTimerThread-%d").daemon(true).build());
 
         final LinkedList<Snapshot> snapshotList = new LinkedList<>();
 
@@ -101,8 +106,7 @@ public class TransactionProducer {
                     Snapshot begin = snapshotList.getFirst();
                     Snapshot end = snapshotList.getLast();
 
-                    final long sendCount = (end.sendRequestSuccessCount - begin.sendRequestSuccessCount)
-                            + (end.sendRequestFailedCount - begin.sendRequestFailedCount);
+                    final long sendCount = end.sendRequestSuccessCount - begin.sendRequestSuccessCount;
                     final long sendTps = (sendCount * 1000L) / (end.endTime - begin.endTime);
                     final double averageRT = (end.sendMessageTimeTotal - begin.sendMessageTimeTotal) / (double) (end.sendRequestSuccessCount - begin.sendRequestSuccessCount);
 
@@ -112,9 +116,9 @@ public class TransactionProducer {
                     final long dupCheck = end.duplicatedCheck - begin.duplicatedCheck;
 
                     System.out.printf(
-                        "Current Time: %s Send TPS:%5d Max RT(ms):%5d AVG RT(ms):%3.1f Send Failed: %d check: %d unexpectedCheck: %d duplicatedCheck: %d %n",
-                            System.currentTimeMillis(), sendTps, statsBenchmark.getSendMessageMaxRT().get(), averageRT, failCount, checkCount,
-                            unexpectedCheck, dupCheck);
+                        "Current Time: %s | Send TPS: %5d | Max RT(ms): %5d | AVG RT(ms): %3.1f | Send Failed: %d | Check: %d | UnexpectedCheck: %d | DuplicatedCheck: %d%n",
+                        UtilAll.timeMillisToHumanString2(System.currentTimeMillis()), sendTps, statsBenchmark.getSendMessageMaxRT().get(), averageRT, failCount, checkCount,
+                        unexpectedCheck, dupCheck);
                     statsBenchmark.getSendMessageMaxRT().set(0);
                 }
             }
@@ -127,7 +131,7 @@ public class TransactionProducer {
                     e.printStackTrace();
                 }
             }
-        }, 10000, 10000, TimeUnit.MILLISECONDS);
+        }, config.reportInterval, config.reportInterval, TimeUnit.MILLISECONDS);
 
         RPCHook rpcHook = null;
         if (config.aclEnable) {
@@ -137,11 +141,11 @@ public class TransactionProducer {
         }
         final TransactionListener transactionCheckListener = new TransactionListenerImpl(statsBenchmark, config);
         final TransactionMQProducer producer = new TransactionMQProducer(
-                null,
-                "benchmark_transaction_producer",
-                rpcHook,
-                config.msgTraceEnable,
-                null);
+            null,
+            "benchmark_transaction_producer",
+            rpcHook,
+            config.msgTraceEnable,
+            null);
         producer.setInstanceName(Long.toString(System.currentTimeMillis()));
         producer.setTransactionListener(transactionCheckListener);
         producer.setDefaultTopicQueueNums(1000);
@@ -160,7 +164,7 @@ public class TransactionProducer {
                         final long beginTimestamp = System.currentTimeMillis();
                         try {
                             SendResult sendResult =
-                                    producer.sendMessageInTransaction(buildMessage(config), null);
+                                producer.sendMessageInTransaction(buildMessage(config), null);
                             success = sendResult != null && sendResult.getSendStatus() == SendStatus.SEND_OK;
                         } catch (Throwable e) {
                             success = false;
@@ -170,7 +174,7 @@ public class TransactionProducer {
                             long prevMaxRT = statsBenchmark.getSendMessageMaxRT().get();
                             while (currentRT > prevMaxRT) {
                                 boolean updated = statsBenchmark.getSendMessageMaxRT()
-                                        .compareAndSet(prevMaxRT, currentRT);
+                                    .compareAndSet(prevMaxRT, currentRT);
                                 if (updated)
                                     break;
 
@@ -287,6 +291,10 @@ public class TransactionProducer {
         opt.setRequired(false);
         options.addOption(opt);
 
+        opt = new Option("ri", "reportInterval", true, "The number of ms between reports, Default: 10000");
+        opt.setRequired(false);
+        options.addOption(opt);
+
         return options;
     }
 }
@@ -361,10 +369,10 @@ class TransactionListenerImpl implements TransactionListener {
         }
         if (msgMeta.sendResult != LocalTransactionState.UNKNOW) {
             System.out.printf("%s unexpected check: msgId=%s,txId=%s,checkTimes=%s,sendResult=%s\n",
-                    new SimpleDateFormat("HH:mm:ss,SSS").format(new Date()),
-                    msg.getMsgId(), msg.getTransactionId(),
-                    msg.getUserProperty(MessageConst.PROPERTY_TRANSACTION_CHECK_TIMES),
-                    msgMeta.sendResult.toString());
+                new SimpleDateFormat("HH:mm:ss,SSS").format(new Date()),
+                msg.getMsgId(), msg.getTransactionId(),
+                msg.getUserProperty(MessageConst.PROPERTY_TRANSACTION_CHECK_TIMES),
+                msgMeta.sendResult.toString());
             statBenchmark.getUnexpectedCheckCount().increment();
             return msgMeta.sendResult;
         }
@@ -373,9 +381,9 @@ class TransactionListenerImpl implements TransactionListener {
             LocalTransactionState s = msgMeta.checkResult.get(i);
             if (s != LocalTransactionState.UNKNOW) {
                 System.out.printf("%s unexpected check: msgId=%s,txId=%s,checkTimes=%s,sendResult,lastCheckResult=%s\n",
-                        new SimpleDateFormat("HH:mm:ss,SSS").format(new Date()),
-                        msg.getMsgId(), msg.getTransactionId(),
-                        msg.getUserProperty(MessageConst.PROPERTY_TRANSACTION_CHECK_TIMES), s);
+                    new SimpleDateFormat("HH:mm:ss,SSS").format(new Date()),
+                    msg.getMsgId(), msg.getTransactionId(),
+                    msg.getUserProperty(MessageConst.PROPERTY_TRANSACTION_CHECK_TIMES), s);
                 statBenchmark.getUnexpectedCheckCount().increment();
                 return s;
             }
@@ -471,6 +479,7 @@ class TxSendConfig {
     int sendInterval;
     boolean aclEnable;
     boolean msgTraceEnable;
+    int reportInterval;
 }
 
 class LRUMap<K, V> extends LinkedHashMap<K, V> {

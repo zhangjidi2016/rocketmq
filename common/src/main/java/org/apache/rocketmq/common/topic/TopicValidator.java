@@ -16,12 +16,9 @@
  */
 package org.apache.rocketmq.common.topic;
 
-import org.apache.rocketmq.common.UtilAll;
-import org.apache.rocketmq.common.protocol.ResponseCode;
-import org.apache.rocketmq.remoting.protocol.RemotingCommand;
-
 import java.util.HashSet;
 import java.util.Set;
+import org.apache.rocketmq.common.UtilAll;
 
 public class TopicValidator {
 
@@ -36,15 +33,17 @@ public class TopicValidator {
     public static final String RMQ_SYS_OFFSET_MOVED_EVENT = "OFFSET_MOVED_EVENT";
 
     public static final String SYSTEM_TOPIC_PREFIX = "rmq_sys_";
+    public static final String SYNC_BROKER_MEMBER_GROUP_PREFIX = SYSTEM_TOPIC_PREFIX + "SYNC_BROKER_MEMBER_";
+
     public static final boolean[] VALID_CHAR_BIT_MAP = new boolean[128];
     private static final int TOPIC_MAX_LENGTH = 127;
 
-    private static final Set<String> SYSTEM_TOPIC_SET = new HashSet<String>();
+    private static final Set<String> SYSTEM_TOPIC_SET = new HashSet<>();
 
     /**
      * Topics'set which client can not send msg!
      */
-    private static final Set<String> NOT_ALLOWED_SEND_TOPIC_SET = new HashSet<String>();
+    private static final Set<String> NOT_ALLOWED_SEND_TOPIC_SET = new HashSet<>();
 
     static {
         SYSTEM_TOPIC_SET.add(AUTO_CREATE_TOPIC_KEY_TOPIC);
@@ -58,6 +57,11 @@ public class TopicValidator {
         SYSTEM_TOPIC_SET.add(RMQ_SYS_OFFSET_MOVED_EVENT);
 
         NOT_ALLOWED_SEND_TOPIC_SET.add(RMQ_SYS_SCHEDULE_TOPIC);
+        NOT_ALLOWED_SEND_TOPIC_SET.add(RMQ_SYS_TRANS_HALF_TOPIC);
+        NOT_ALLOWED_SEND_TOPIC_SET.add(RMQ_SYS_TRANS_OP_HALF_TOPIC);
+        NOT_ALLOWED_SEND_TOPIC_SET.add(RMQ_SYS_TRANS_CHECK_MAX_TIME_TOPIC);
+        NOT_ALLOWED_SEND_TOPIC_SET.add(RMQ_SYS_SELF_TEST_TOPIC);
+        NOT_ALLOWED_SEND_TOPIC_SET.add(RMQ_SYS_OFFSET_MOVED_EVENT);
 
         // regex: ^[%|a-zA-Z0-9_-]+$
         // %
@@ -95,36 +99,39 @@ public class TopicValidator {
         return false;
     }
 
-    public static boolean validateTopic(String topic, RemotingCommand response) {
+    public static ValidateTopicResult validateTopic(String topic) {
 
         if (UtilAll.isBlank(topic)) {
-            response.setCode(ResponseCode.SYSTEM_ERROR);
-            response.setRemark("The specified topic is blank.");
-            return false;
+            return new ValidateTopicResult(false, "The specified topic is blank.");
         }
 
         if (isTopicOrGroupIllegal(topic)) {
-            response.setCode(ResponseCode.SYSTEM_ERROR);
-            response.setRemark("The specified topic contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$");
-            return false;
+            return new ValidateTopicResult(false, "The specified topic contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$");
         }
 
         if (topic.length() > TOPIC_MAX_LENGTH) {
-            response.setCode(ResponseCode.SYSTEM_ERROR);
-            response.setRemark("The specified topic is longer than topic max length.");
-            return false;
+            return new ValidateTopicResult(false, "The specified topic is longer than topic max length.");
         }
 
-        return true;
+        return new ValidateTopicResult(true, "");
     }
 
-    public static boolean isSystemTopic(String topic, RemotingCommand response) {
-        if (isSystemTopic(topic)) {
-            response.setCode(ResponseCode.SYSTEM_ERROR);
-            response.setRemark("The topic[" + topic + "] is conflict with system topic.");
-            return true;
+    public static class ValidateTopicResult {
+        private final boolean valid;
+        private final String remark;
+
+        public ValidateTopicResult(boolean valid, String remark) {
+            this.valid = valid;
+            this.remark = remark;
         }
-        return false;
+
+        public boolean isValid() {
+            return valid;
+        }
+
+        public String getRemark() {
+            return remark;
+        }
     }
 
     public static boolean isSystemTopic(String topic) {
@@ -133,15 +140,6 @@ public class TopicValidator {
 
     public static boolean isNotAllowedSendTopic(String topic) {
         return NOT_ALLOWED_SEND_TOPIC_SET.contains(topic);
-    }
-
-    public static boolean isNotAllowedSendTopic(String topic, RemotingCommand response) {
-        if (isNotAllowedSendTopic(topic)) {
-            response.setCode(ResponseCode.NO_PERMISSION);
-            response.setRemark("Sending message to topic[" + topic + "] is forbidden.");
-            return true;
-        }
-        return false;
     }
 
     public static void addSystemTopic(String systemTopic) {
