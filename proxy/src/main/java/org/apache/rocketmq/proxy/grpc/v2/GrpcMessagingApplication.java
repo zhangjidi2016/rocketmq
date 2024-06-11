@@ -175,7 +175,8 @@ public class GrpcMessagingApplication extends MessagingServiceGrpc.MessagingServ
             .setProtocolType(ChannelProtocolType.GRPC_V2.getName())
             .setLanguage(getDefaultStringMetadataInfo(headers, InterceptorConstants.LANGUAGE))
             .setClientVersion(getDefaultStringMetadataInfo(headers, InterceptorConstants.CLIENT_VERSION))
-            .setAction(getDefaultStringMetadataInfo(headers, InterceptorConstants.SIMPLE_RPC_NAME));
+            .setAction(getDefaultStringMetadataInfo(headers, InterceptorConstants.SIMPLE_RPC_NAME))
+            .setNamespace(getDefaultStringMetadataInfo(headers, InterceptorConstants.NAMESPACE_ID));
         if (ctx.getDeadline() != null) {
             context.setRemainingMs(ctx.getDeadline().timeRemaining(TimeUnit.MILLISECONDS));
         }
@@ -378,17 +379,17 @@ public class GrpcMessagingApplication extends MessagingServiceGrpc.MessagingServ
     @Override
     public StreamObserver<TelemetryCommand> telemetry(StreamObserver<TelemetryCommand> responseObserver) {
         Function<Status, TelemetryCommand> statusResponseCreator = status -> TelemetryCommand.newBuilder().setStatus(status).build();
-        ProxyContext context = createContext();
-        StreamObserver<TelemetryCommand> responseTelemetryCommand = grpcMessingActivity.telemetry(context, responseObserver);
+        ContextStreamObserver<TelemetryCommand> responseTelemetryCommand = grpcMessingActivity.telemetry(responseObserver);
         return new StreamObserver<TelemetryCommand>() {
             @Override
             public void onNext(TelemetryCommand value) {
+                ProxyContext context = createContext();
                 try {
                     validateContext(context);
                     addExecutor(clientManagerThreadPoolExecutor,
                         context,
                         value,
-                        () -> responseTelemetryCommand.onNext(value),
+                        () -> responseTelemetryCommand.onNext(context, value),
                         responseObserver,
                         statusResponseCreator);
                 } catch (Throwable t) {

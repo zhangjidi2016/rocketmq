@@ -99,6 +99,8 @@ public class ResponseCode extends RemotingSysResponseCode {
     public static final int RPC_SEND_TO_CHANNEL_FAILED = -1004;
     public static final int RPC_TIME_OUT = -1006;
 
+    public static final int GO_AWAY = 1500;
+
     /**
      * Controller response code
      */
@@ -124,4 +126,8 @@ public class ResponseCode extends RemotingSysResponseCode {
     public static final int CONTROLLER_ALTER_SYNC_STATE_SET_FAILED = 2013;
 
     public static final int CONTROLLER_BROKER_ID_INVALID = 2014;
+
+    public static final int CONTROLLER_JRAFT_INTERNAL_ERROR = 2015;
+
+    public static final int CONTROLLER_BROKER_LIVE_INFO_NOT_EXISTS = 2016;
 }

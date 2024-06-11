@@ -29,7 +29,6 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.apache.rocketmq.srvutil.ServerUtil;
 import org.apache.rocketmq.tools.command.acl.ClusterAclConfigVersionListSubCommand;
 import org.apache.rocketmq.tools.command.acl.DeleteAccessConfigSubCommand;
-import org.apache.rocketmq.tools.command.acl.GetAccessConfigSubCommand;
 import org.apache.rocketmq.tools.command.acl.UpdateAccessConfigSubCommand;
 import org.apache.rocketmq.tools.command.acl.UpdateGlobalWhiteAddrSubCommand;
 import org.apache.rocketmq.tools.command.broker.BrokerConsumeStatsSubCommad;
@@ -80,6 +79,7 @@ import org.apache.rocketmq.tools.command.message.QueryMsgByOffsetSubCommand;
 import org.apache.rocketmq.tools.command.message.QueryMsgByUniqueKeySubCommand;
 import org.apache.rocketmq.tools.command.message.QueryMsgTraceByIdSubCommand;
 import org.apache.rocketmq.tools.command.message.SendMessageCommand;
+import org.apache.rocketmq.tools.command.export.ExportMetadataInRocksDBCommand;
 import org.apache.rocketmq.tools.command.namesrv.AddWritePermSubCommand;
 import org.apache.rocketmq.tools.command.namesrv.DeleteKvConfigCommand;
 import org.apache.rocketmq.tools.command.namesrv.GetNamesrvConfigCommand;
@@ -247,7 +247,6 @@ public class MQAdminStartup {
         initCommand(new DeleteAccessConfigSubCommand());
         initCommand(new ClusterAclConfigVersionListSubCommand());
         initCommand(new UpdateGlobalWhiteAddrSubCommand());
-        initCommand(new GetAccessConfigSubCommand());
 
         initCommand(new UpdateStaticTopicSubCommand());
         initCommand(new RemappingStaticTopicSubCommand());
@@ -255,6 +254,7 @@ public class MQAdminStartup {
         initCommand(new ExportMetadataCommand());
         initCommand(new ExportConfigsCommand());
         initCommand(new ExportMetricsCommand());
+        initCommand(new ExportMetadataInRocksDBCommand());
 
         initCommand(new HAStatusSubCommand());
 
@@ -278,7 +278,7 @@ public class MQAdminStartup {
         System.out.printf("The most commonly used mqadmin commands are:%n");
 
         for (SubCommand cmd : SUB_COMMANDS) {
-            System.out.printf("   %-25s %s%n", cmd.commandName(), cmd.commandDesc());
+            System.out.printf("   %-35s %s%n", cmd.commandName(), cmd.commandDesc());
         }
 
         System.out.printf("%nSee 'mqadmin help <command>' for more information on a specific command.%n");

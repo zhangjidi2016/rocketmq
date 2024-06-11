@@ -17,11 +17,15 @@
 
 package org.apache.rocketmq.tieredstore.file;
 
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.rocketmq.common.message.MessageConst;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.store.DispatchRequest;
 import org.apache.rocketmq.tieredstore.common.AppendResult;
+import org.apache.rocketmq.tieredstore.index.IndexService;
 import org.apache.rocketmq.tieredstore.metadata.QueueMetadata;
 import org.apache.rocketmq.tieredstore.metadata.TopicMetadata;
 import org.apache.rocketmq.tieredstore.util.TieredStoreUtil;
@@ -31,14 +35,13 @@ public class CompositeQueueFlatFile extends CompositeFlatFile {
     private final MessageQueue messageQueue;
     private long topicSequenceNumber;
     private QueueMetadata queueMetadata;
-    private final TieredIndexFile indexFile;
+    private final IndexService indexStoreService;
 
     public CompositeQueueFlatFile(TieredFileAllocator fileQueueFactory, MessageQueue messageQueue) {
         super(fileQueueFactory, TieredStoreUtil.toPath(messageQueue));
         this.messageQueue = messageQueue;
-        this.recoverTopicMetadata();
-        super.recoverMetadata();
-        this.indexFile = TieredFlatFileManager.getIndexFile(storeConfig);
+        this.recoverQueueMetadata();
+        this.indexStoreService = TieredFlatFileManager.getTieredIndexService(storeConfig);
     }
 
     @Override
@@ -46,11 +49,12 @@ public class CompositeQueueFlatFile extends CompositeFlatFile {
         if (!consumeQueue.isInitialized()) {
             queueMetadata.setMinOffset(offset);
             queueMetadata.setMaxOffset(offset);
+            metadataStore.updateQueue(queueMetadata);
         }
         super.initOffset(offset);
     }
 
-    public void recoverTopicMetadata() {
+    public void recoverQueueMetadata() {
         TopicMetadata topicMetadata = this.metadataStore.getTopic(messageQueue.getTopic());
         if (topicMetadata == null) {
             topicMetadata = this.metadataStore.addTopic(messageQueue.getTopic(), -1L);
@@ -64,18 +68,16 @@ public class CompositeQueueFlatFile extends CompositeFlatFile {
         if (queueMetadata.getMaxOffset() < queueMetadata.getMinOffset()) {
             queueMetadata.setMaxOffset(queueMetadata.getMinOffset());
         }
-        this.dispatchOffset = queueMetadata.getMaxOffset();
     }
 
-    public void persistMetadata() {
+    public void flushMetadata() {
         try {
-            if (consumeQueue.getCommitOffset() < queueMetadata.getMinOffset()) {
-                return;
-            }
-            queueMetadata.setMaxOffset(consumeQueue.getCommitOffset() / TieredConsumeQueue.CONSUME_QUEUE_STORE_UNIT_SIZE);
+            queueMetadata.setMinOffset(super.getConsumeQueueMinOffset());
+            queueMetadata.setMaxOffset(super.getConsumeQueueMaxOffset());
             metadataStore.updateQueue(queueMetadata);
         } catch (Exception e) {
-            LOGGER.error("CompositeFlatFile#flushMetadata: update queue metadata failed: topic: {}, queue: {}", messageQueue.getTopic(), messageQueue.getQueueId(), e);
+            LOGGER.error("CompositeFlatFile#flushMetadata error, topic: {}, queue: {}",
+                messageQueue.getTopic(), messageQueue.getQueueId(), e);
         }
     }
 
@@ -87,24 +89,15 @@ public class CompositeQueueFlatFile extends CompositeFlatFile {
             return AppendResult.FILE_CLOSED;
         }
 
+        Set<String> keySet = new HashSet<>(
+            Arrays.asList(request.getKeys().split(MessageConst.KEY_SEPARATOR)));
         if (StringUtils.isNotBlank(request.getUniqKey())) {
-            AppendResult result = indexFile.append(messageQueue, (int) topicSequenceNumber,
-                request.getUniqKey(), request.getCommitLogOffset(), request.getMsgSize(), request.getStoreTimestamp());
-            if (result != AppendResult.SUCCESS) {
-                return result;
-            }
+            keySet.add(request.getUniqKey());
         }
 
-        for (String key : request.getKeys().split(MessageConst.KEY_SEPARATOR)) {
-            if (StringUtils.isNotBlank(key)) {
-                AppendResult result = indexFile.append(messageQueue, (int) topicSequenceNumber,
-                    key, request.getCommitLogOffset(), request.getMsgSize(), request.getStoreTimestamp());
-                if (result != AppendResult.SUCCESS) {
-                    return result;
-                }
-            }
-        }
-        return AppendResult.SUCCESS;
+        return indexStoreService.putKey(
+            messageQueue.getTopic(), (int) topicSequenceNumber, messageQueue.getQueueId(), keySet,
+            request.getCommitLogOffset(), request.getMsgSize(), request.getStoreTimestamp());
     }
 
     public MessageQueue getMessageQueue() {
@@ -114,7 +107,7 @@ public class CompositeQueueFlatFile extends CompositeFlatFile {
     @Override
     public void shutdown() {
         super.shutdown();
-        metadataStore.updateQueue(queueMetadata);
+        this.flushMetadata();
     }
 
     @Override
